@@ -9,15 +9,29 @@
 #include <stdlib.h>
 #include <math.h>
 #include "jpeg_encoder.h"
+#include <stdint.h>
+#include <unistd.h>
+#include <string.h>
+
+//ofstream fout;
+
+
 
 
 static const unsigned char s_jo_ZigZag[] = { 0,1,5,6,14,15,27,28,2,4,7,13,16,26,29,42,3,8,12,17,25,30,41,43,9,11,18,24,31,40,44,53,10,19,23,32,39,45,52,54,20,22,33,38,46,51,55,60,21,34,37,47,50,56,59,61,35,36,48,49,57,58,62,63 };
 unsigned int NumBytesWritten;
 
-void f_write(void *fil, const char *buf, size_t length, unsigned int *z) {
+void f_write(void **pp, const void *buf, size_t length, unsigned int *z) {
+#if 1
+    memcpy(*pp, buf, length);
+    *((unsigned char*) pp) += length;
+    //{printf("write %p length %d\n", *pp, length);
+#else
+    write(1, buf, length);
+#endif
 }
 
-static void jo_writeBits(void *fil, int &bitBuf, int &bitCnt, const unsigned short *bs) {
+static void jo_writeBits(void **pp, int &bitBuf, int &bitCnt, const unsigned short *bs) {
 	int indice=0;
 	unsigned char aux[]={'c'};
 
@@ -29,12 +43,12 @@ static void jo_writeBits(void *fil, int &bitBuf, int &bitCnt, const unsigned sho
 		unsigned char c = (bitBuf >> 16) & 255;
 
 		aux[0] =c;
-		f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+		f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
 		if(c == 255) {
 
 			aux[0] =0;
-			f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+			f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 		}
 		indice++;
 
@@ -98,7 +112,7 @@ static void jo_calcBits(int val, unsigned short bits[2]) {
 /*
  *  Proccess array data
  */
-static int jo_processDU(void *fil, int &bitBuf, int &bitCnt, float *CDU, float *fdtbl, int DC, const unsigned short HTDC[256][2], const unsigned short HTAC[256][2]) {
+static int jo_processDU(void **pp, int &bitBuf, int &bitCnt, float *CDU, float *fdtbl, int DC, const unsigned short HTDC[256][2], const unsigned short HTAC[256][2]) {
 	const unsigned short EOB[2] = { HTAC[0x00][0], HTAC[0x00][1] };
 	const unsigned short M16zeroes[2] = { HTAC[0xF0][0], HTAC[0xF0][1] };
 
@@ -120,12 +134,12 @@ static int jo_processDU(void *fil, int &bitBuf, int &bitCnt, float *CDU, float *
 	// Encode DC
 	int diff = DU[0] - DC;
 	if (diff == 0) {
-		jo_writeBits(fil, bitBuf, bitCnt, HTDC[0]);
+		jo_writeBits(pp, bitBuf, bitCnt, HTDC[0]);
 	} else {
 		unsigned short bits[2];
 		jo_calcBits(diff, bits);
-		jo_writeBits(fil, bitBuf, bitCnt, HTDC[bits[1]]);
-		jo_writeBits(fil, bitBuf, bitCnt, bits);
+		jo_writeBits(pp, bitBuf, bitCnt, HTDC[bits[1]]);
+		jo_writeBits(pp, bitBuf, bitCnt, bits);
 	}
 	// Encode ACs
 	int end0pos = 63;
@@ -133,7 +147,7 @@ static int jo_processDU(void *fil, int &bitBuf, int &bitCnt, float *CDU, float *
 	}
 	// end0pos = first element in reverse order !=0
 	if(end0pos == 0) {
-		jo_writeBits(fil, bitBuf, bitCnt, EOB);
+		jo_writeBits(pp, bitBuf, bitCnt, EOB);
 		return DU[0];
 	}
 	for(int i = 1; i <= end0pos; ++i) {
@@ -144,16 +158,16 @@ static int jo_processDU(void *fil, int &bitBuf, int &bitCnt, float *CDU, float *
 		if ( nrzeroes >= 16 ) {
 			int lng = nrzeroes>>4;
 			for (int nrmarker=1; nrmarker <= lng; ++nrmarker)
-				jo_writeBits(fil, bitBuf, bitCnt, M16zeroes);
+				jo_writeBits(pp, bitBuf, bitCnt, M16zeroes);
 			nrzeroes &= 15;
 		}
 		unsigned short bits[2];
 		jo_calcBits(DU[i], bits);
-		jo_writeBits(fil, bitBuf, bitCnt, HTAC[(nrzeroes<<4)+bits[1]]);
-		jo_writeBits(fil, bitBuf, bitCnt, bits);
+		jo_writeBits(pp, bitBuf, bitCnt, HTAC[(nrzeroes<<4)+bits[1]]);
+		jo_writeBits(pp, bitBuf, bitCnt, bits);
 	}
 	if(end0pos != 63) {
-		jo_writeBits(fil, bitBuf, bitCnt, EOB);
+		jo_writeBits(pp, bitBuf, bitCnt, EOB);
 	}
 	return DU[0];
 }
@@ -163,6 +177,11 @@ static int jo_processDU(void *fil, int &bitBuf, int &bitCnt, float *CDU, float *
  */
 
 bool jo_write_jpg( const void *data, int width, int height, int comp, int quality) {
+    unsigned char dest[1024*1024*10];
+    void *p = &dest;
+    void **pp = &p;
+    //printf("buff %p (p: %p)\n", p, pp);
+    return 0;
 
 	// Constants that don't pollute global namespace
 	static const unsigned char std_dc_luminance_nrcodes[] = {0,0,1,5,1,1,1,1,1,1,0,0,0,0,0,0,0};
@@ -243,15 +262,6 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 	 */
 
 
-    void *fil;
-#if 0
-	TCHAR *Path = "0:/";
-	f_mount(&fatfs, Path, 0);
-	SD_Pic = (char *)PicName;
-	f_open(&fil, SD_Pic, FA_CREATE_ALWAYS | FA_WRITE | FA_READ);
-#endif
-
-
 
 	quality = quality ? quality : 90;
 	quality = quality < 1 ? 1 : quality > 100 ? 100 : quality;
@@ -278,48 +288,48 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 	 */
 	static const unsigned char head0[] = { 0xFF,0xD8,0xFF,0xE0,0,0x10,'J','F','I','F',0,1,1,0,0,1,0,1,0,0,0xFF,0xDB,0,0x84,0 };
 
-	f_write(&fil, (const void*)head0, sizeof(head0),&NumBytesWritten);
+	f_write(pp, (const void*)head0, sizeof(head0),&NumBytesWritten);
 
-	f_write(&fil, (const void*)YTable, sizeof(YTable),&NumBytesWritten);
+	f_write(pp, (const void*)YTable, sizeof(YTable),&NumBytesWritten);
 
 	unsigned char aux[] ={1};
-	f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
-	f_write(&fil, (const void*)UVTable, sizeof(UVTable),&NumBytesWritten);
+	f_write(pp, (const void*)UVTable, sizeof(UVTable),&NumBytesWritten);
 	const unsigned char head1[] = { 0xFF,0xC0,0,0x11,8,height>>8,height&0xFF,width>>8,width&0xFF,3,1,0x11,0,2,0x11,1,3,0x11,1,0xFF,0xC4,0x01,0xA2,0 };
 
-	f_write(&fil, (const void*)head1, sizeof(head1),&NumBytesWritten);
+	f_write(pp, (const void*)head1, sizeof(head1),&NumBytesWritten);
 
-	f_write(&fil, std_dc_luminance_nrcodes+1, sizeof(std_dc_luminance_nrcodes)-1,&NumBytesWritten);
+	f_write(pp, std_dc_luminance_nrcodes+1, sizeof(std_dc_luminance_nrcodes)-1,&NumBytesWritten);
 
-	f_write(&fil, std_dc_luminance_values, sizeof(std_dc_luminance_values),&NumBytesWritten);
+	f_write(pp, std_dc_luminance_values, sizeof(std_dc_luminance_values),&NumBytesWritten);
 
 	// HTYACinfo
 	aux[0]=0x10;
-	f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
-	f_write(&fil, std_ac_luminance_nrcodes+1, sizeof(std_ac_luminance_nrcodes)-1,&NumBytesWritten);
+	f_write(pp, std_ac_luminance_nrcodes+1, sizeof(std_ac_luminance_nrcodes)-1,&NumBytesWritten);
 
-	f_write(&fil, std_ac_luminance_values, sizeof(std_ac_luminance_values),&NumBytesWritten);
+	f_write(pp, std_ac_luminance_values, sizeof(std_ac_luminance_values),&NumBytesWritten);
 
 	// HTUDCinfo
 	aux[0]=1;
-	f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
-	f_write(&fil, std_dc_chrominance_nrcodes+1, sizeof(std_dc_chrominance_nrcodes)-1,&NumBytesWritten);
+	f_write(pp, std_dc_chrominance_nrcodes+1, sizeof(std_dc_chrominance_nrcodes)-1,&NumBytesWritten);
 
-	f_write(&fil, std_dc_chrominance_values, sizeof(std_dc_chrominance_values),&NumBytesWritten);
+	f_write(pp, std_dc_chrominance_values, sizeof(std_dc_chrominance_values),&NumBytesWritten);
 
 	// HTUACinfo
 	aux[0]=0x11;
-	f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
-	f_write(&fil, std_ac_chrominance_nrcodes+1, sizeof(std_ac_chrominance_nrcodes)-1,&NumBytesWritten);
+	f_write(pp, std_ac_chrominance_nrcodes+1, sizeof(std_ac_chrominance_nrcodes)-1,&NumBytesWritten);
 
-	f_write(&fil, std_ac_chrominance_values, sizeof(std_ac_chrominance_values),&NumBytesWritten);
+	f_write(pp, std_ac_chrominance_values, sizeof(std_ac_chrominance_values),&NumBytesWritten);
 	static const unsigned char head2[] = { 0xFF,0xDA,0,0xC,3,1,0,2,0x11,3,0x11,0,0x3F,0 };
 
-	f_write(&fil, (const void*)head2, sizeof(head2),&NumBytesWritten);
+	f_write(pp, (const void*)head2, sizeof(head2),&NumBytesWritten);
 
 	// Encode 8x8 macroblocks
 	const unsigned char *imageData = (const unsigned char *)data;
@@ -338,16 +348,16 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 			float YDU[64], UDU[64], VDU[64];
 			for(int row = y, pos = 0; row < y+8; ++row) {
 				for(int col = x; col < x+8; ++col, ++pos) {
-					int p = row*width*comp + col*comp;
+					int index = row*width*comp + col*comp;
 					if(row >= height) {
-						p -= width*comp*(row+1 - height);
+						index -= width*comp*(row+1 - height);
 					}
 					if(col >= width) {
-						p -= comp*(col+1 - width);
+						index -= comp*(col+1 - width);
 					}
 
 					//RGB components
-					float r = imageData[p+0], g = imageData[p+ofsG], b = imageData[p+ofsB];
+					float r = imageData[index+0], g = imageData[index+ofsG], b = imageData[index+ofsB];
 
 					YDU[pos]=+0.29900f*r+0.58700f*g+0.11400f*b-128;
 					UDU[pos]=-0.16874f*r-0.33126f*g+0.50000f*b;
@@ -358,31 +368,31 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 			/*
 			 * Encode functions
 			 */
-			DCY = jo_processDU(&fil, bitBuf, bitCnt, YDU, fdtbl_Y, DCY, YDC_HT, YAC_HT);
-			DCU = jo_processDU(&fil, bitBuf, bitCnt, UDU, fdtbl_UV, DCU, UVDC_HT, UVAC_HT);
-			DCV = jo_processDU(&fil, bitBuf, bitCnt, VDU, fdtbl_UV, DCV, UVDC_HT, UVAC_HT);
+			DCY = jo_processDU(pp, bitBuf, bitCnt, YDU, fdtbl_Y, DCY, YDC_HT, YAC_HT);
+			DCU = jo_processDU(pp, bitBuf, bitCnt, UDU, fdtbl_UV, DCU, UVDC_HT, UVAC_HT);
+			DCV = jo_processDU(pp, bitBuf, bitCnt, VDU, fdtbl_UV, DCV, UVDC_HT, UVAC_HT);
 
 		}
 	}
 
 	// Do the bit alignment of the EOI marker
-	static const unsigned short fillBits[] = {0x7F, 7};
-	jo_writeBits(&fil, bitBuf, bitCnt, fillBits);
+	static const unsigned short pplBits[] = {0x7F, 7};
+	jo_writeBits(pp, bitBuf, bitCnt, pplBits);
 
 	// EOI-
 
 	aux[0]=0xFF;
-	f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
 
 	aux[0]=0xD9;
-	f_write(&fil, aux, sizeof(aux),&NumBytesWritten);
+	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
 	/*
-	 * Close the file
+	 * Close the ppe
 	 */
 #if 0
-	f_close(&fil);
+	f_close(pp);
 #endif
 	return true;
 }
@@ -430,9 +440,8 @@ void TakePicture(){
 
 	}
 
-
-
+//    fout.open("test.jpg", ios::out|ios::binary|ios::trunc);
  	jo_write_jpg( image, 30, 30, 3, 90); // comp can be 1, 3, or 4. Lum, RGB, or RGBX respectively.
-
+//    fout.close();
 
 }

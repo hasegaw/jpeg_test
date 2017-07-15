@@ -7,15 +7,10 @@
  */
 
 #include "jpeg_encoder.h"
-#include <iostream>
 
 using namespace std;
 
 int main(){
-
-	cout<< "Taking picture\n\r";
 	TakePicture();
-	cout<<"Picture taken \n\r";
-
 }
 
