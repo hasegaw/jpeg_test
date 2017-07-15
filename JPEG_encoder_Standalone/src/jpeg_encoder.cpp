@@ -22,13 +22,8 @@ static const unsigned char s_jo_ZigZag[] = { 0,1,5,6,14,15,27,28,2,4,7,13,16,26,
 unsigned int NumBytesWritten;
 
 void f_write(void **pp, const void *buf, size_t length, unsigned int *z) {
-#if 1
     memcpy(*pp, buf, length);
-    *((unsigned char*) pp) += length;
-    //{printf("write %p length %d\n", *pp, length);
-#else
-    write(1, buf, length);
-#endif
+    *((intptr_t*) pp) += length;
 }
 
 static void jo_writeBits(void **pp, int &bitBuf, int &bitCnt, const unsigned short *bs) {
@@ -176,12 +171,9 @@ static int jo_processDU(void **pp, int &bitBuf, int &bitCnt, float *CDU, float *
  * Write array data to JPEG
  */
 
-bool jo_write_jpg( const void *data, int width, int height, int comp, int quality) {
-    unsigned char dest[1024*1024*10];
-    void *p = &dest;
+unsigned int jo_write_jpg(void *dest, const void *data, int width, int height, int comp, int quality) {
+    void *p = dest;
     void **pp = &p;
-    //printf("buff %p (p: %p)\n", p, pp);
-    return 0;
 
 	// Constants that don't pollute global namespace
 	static const unsigned char std_dc_luminance_nrcodes[] = {0,0,1,5,1,1,1,1,1,1,0,0,0,0,0,0,0};
@@ -380,21 +372,16 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 	jo_writeBits(pp, bitBuf, bitCnt, pplBits);
 
 	// EOI-
-
 	aux[0]=0xFF;
 	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
-
 
 	aux[0]=0xD9;
 	f_write(pp, aux, sizeof(aux),&NumBytesWritten);
 
 	/*
-	 * Close the ppe
+	 * Return file length.
 	 */
-#if 0
-	f_close(pp);
-#endif
-	return true;
+    return *((unsigned char **)pp) - (unsigned char *)dest;
 }
 
 /*
@@ -410,10 +397,7 @@ void TakePicture(){
 
 
 	for(int y = 0; y < 30*3; y+=3) {
-
-			for(int x = 0; x < 30*3; x+=3) {
-
-
+        for(int x = 0; x < 30*3; x+=3) {
 				if( y< 15*3){//blue
 					image[y*30+x]=0; 		//R
 					image[(y*30+x)+1]=0;	//G
@@ -437,11 +421,11 @@ void TakePicture(){
 					}
 				}
 			}
-
 	}
 
-//    fout.open("test.jpg", ios::out|ios::binary|ios::trunc);
- 	jo_write_jpg( image, 30, 30, 3, 90); // comp can be 1, 3, or 4. Lum, RGB, or RGBX respectively.
-//    fout.close();
-
+    void *dest = (void*) new unsigned char[1024 * 1024 * 10];
+	int len = jo_write_jpg(dest, image, 30, 30, 3, 90); // comp can be 1, 3, or 4. Lum, RGB, or RGBX respectively.
+    printf("%p\n", dest);
+    printf("%d bytes\n", len);
+    write(2, dest, len);
 }
