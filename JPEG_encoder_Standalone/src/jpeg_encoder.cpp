@@ -425,7 +425,9 @@ void TakePicture(){
 
     void *dest = (void*) new unsigned char[1024 * 1024 * 10];
 	int len = jo_write_jpg(dest, image, 30, 30, 3, 90); // comp can be 1, 3, or 4. Lum, RGB, or RGBX respectively.
+#if 0
     printf("%p\n", dest);
     printf("%d bytes\n", len);
     write(2, dest, len);
+#endif
 }
