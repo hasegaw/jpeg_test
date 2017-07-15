@@ -12,9 +12,12 @@
 
 
 static const unsigned char s_jo_ZigZag[] = { 0,1,5,6,14,15,27,28,2,4,7,13,16,26,29,42,3,8,12,17,25,30,41,43,9,11,18,24,31,40,44,53,10,19,23,32,39,45,52,54,20,22,33,38,46,51,55,60,21,34,37,47,50,56,59,61,35,36,48,49,57,58,62,63 };
-UINT NumBytesWritten;
+unsigned int NumBytesWritten;
 
-static void jo_writeBits(FIL *fp, int &bitBuf, int &bitCnt, const unsigned short *bs) {
+void f_write(void *fil, const char *buf, size_t length, unsigned int *z) {
+}
+
+static void jo_writeBits(void *fil, int &bitBuf, int &bitCnt, const unsigned short *bs) {
 	int indice=0;
 	unsigned char aux[]={'c'};
 
@@ -95,7 +98,7 @@ static void jo_calcBits(int val, unsigned short bits[2]) {
 /*
  *  Proccess array data
  */
-static int jo_processDU(FIL *fp, int &bitBuf, int &bitCnt, float *CDU, float *fdtbl, int DC, const unsigned short HTDC[256][2], const unsigned short HTAC[256][2]) {
+static int jo_processDU(void *fil, int &bitBuf, int &bitCnt, float *CDU, float *fdtbl, int DC, const unsigned short HTDC[256][2], const unsigned short HTAC[256][2]) {
 	const unsigned short EOB[2] = { HTAC[0x00][0], HTAC[0x00][1] };
 	const unsigned short M16zeroes[2] = { HTAC[0xF0][0], HTAC[0xF0][1] };
 
@@ -117,12 +120,12 @@ static int jo_processDU(FIL *fp, int &bitBuf, int &bitCnt, float *CDU, float *fd
 	// Encode DC
 	int diff = DU[0] - DC;
 	if (diff == 0) {
-		jo_writeBits(fp, bitBuf, bitCnt, HTDC[0]);
+		jo_writeBits(fil, bitBuf, bitCnt, HTDC[0]);
 	} else {
 		unsigned short bits[2];
 		jo_calcBits(diff, bits);
-		jo_writeBits(fp, bitBuf, bitCnt, HTDC[bits[1]]);
-		jo_writeBits(fp, bitBuf, bitCnt, bits);
+		jo_writeBits(fil, bitBuf, bitCnt, HTDC[bits[1]]);
+		jo_writeBits(fil, bitBuf, bitCnt, bits);
 	}
 	// Encode ACs
 	int end0pos = 63;
@@ -130,7 +133,7 @@ static int jo_processDU(FIL *fp, int &bitBuf, int &bitCnt, float *CDU, float *fd
 	}
 	// end0pos = first element in reverse order !=0
 	if(end0pos == 0) {
-		jo_writeBits(fp, bitBuf, bitCnt, EOB);
+		jo_writeBits(fil, bitBuf, bitCnt, EOB);
 		return DU[0];
 	}
 	for(int i = 1; i <= end0pos; ++i) {
@@ -141,16 +144,16 @@ static int jo_processDU(FIL *fp, int &bitBuf, int &bitCnt, float *CDU, float *fd
 		if ( nrzeroes >= 16 ) {
 			int lng = nrzeroes>>4;
 			for (int nrmarker=1; nrmarker <= lng; ++nrmarker)
-				jo_writeBits(fp, bitBuf, bitCnt, M16zeroes);
+				jo_writeBits(fil, bitBuf, bitCnt, M16zeroes);
 			nrzeroes &= 15;
 		}
 		unsigned short bits[2];
 		jo_calcBits(DU[i], bits);
-		jo_writeBits(fp, bitBuf, bitCnt, HTAC[(nrzeroes<<4)+bits[1]]);
-		jo_writeBits(fp, bitBuf, bitCnt, bits);
+		jo_writeBits(fil, bitBuf, bitCnt, HTAC[(nrzeroes<<4)+bits[1]]);
+		jo_writeBits(fil, bitBuf, bitCnt, bits);
 	}
 	if(end0pos != 63) {
-		jo_writeBits(fp, bitBuf, bitCnt, EOB);
+		jo_writeBits(fil, bitBuf, bitCnt, EOB);
 	}
 	return DU[0];
 }
@@ -240,11 +243,13 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 	 */
 
 
+    void *fil;
+#if 0
 	TCHAR *Path = "0:/";
 	f_mount(&fatfs, Path, 0);
 	SD_Pic = (char *)PicName;
-
 	f_open(&fil, SD_Pic, FA_CREATE_ALWAYS | FA_WRITE | FA_READ);
+#endif
 
 
 
@@ -376,8 +381,9 @@ bool jo_write_jpg( const void *data, int width, int height, int comp, int qualit
 	/*
 	 * Close the file
 	 */
-
+#if 0
 	f_close(&fil);
+#endif
 	return true;
 }
 

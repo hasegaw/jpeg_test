@@ -8,6 +8,7 @@
 #ifndef SRC_JPEG_ENCODER_H_
 #define SRC_JPEG_ENCODER_H_
 
+#if 0
 #include "ff.h" //This is needed to use the fwrite funtions whith Xilinx boards
 
 /*
@@ -17,6 +18,7 @@ static FIL fil;
 static char *SD_Pic;
 static FATFS fatfs;
 static char PicName[32]="PIC.jpg";
+#endif
 
 /*
  * Functions
